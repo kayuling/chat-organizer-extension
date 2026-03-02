@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --panel: #111111;
+      --border: #262626;
+      --text: #fafafa;
+      --muted: #a3a3a3;
+      --primary: #ffffff;
+      --primary-text: #111111;
+      --focus: #525252;
+      --success: #22c55e;
+      --error: #ef4444;
+    }
+    body {
+      width: 320px;
+      margin: 0;
+      padding: 14px;
+      color: var(--text);
+      font-family: "Geist", "SF Pro Text", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(500px 180px at -10% -40%, #1f2937 0%, transparent 60%),
+        radial-gradient(380px 140px at 110% 115%, #1f2937 0%, transparent 60%),
+        var(--bg);
+    }
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--panel) 92%, transparent);
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.42);
+      padding: 14px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #d4d4d4;
+      border: 1px solid #333333;
+      border-radius: 999px;
+      padding: 3px 7px;
+      margin-bottom: 10px;
+      background: #171717;
+    }
+    h2 { margin: 0; font-size: 16px; font-weight: 620; letter-spacing: -0.01em; }
+    p {
+      margin: 8px 0 12px;
+      line-height: 1.45;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    button {
+      width: 100%;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--primary-text);
+      background: var(--primary);
+      cursor: pointer;
+      transition: transform .14s ease, box-shadow .14s ease, opacity .14s ease;
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset;
+    }
+    button:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(255, 255, 255, 0.12); }
+    button:active { transform: translateY(0); }
+    button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    button:disabled { opacity: .6; cursor: not-allowed; transform: none; box-shadow: none; }
+    .hint {
+      margin-top: 10px;
+      font-size: 11px;
+      color: #737373;
+      text-align: center;
+    }
+    #status {
+      min-height: 17px;
+      margin-top: 9px;
+      font-size: 11px;
+      color: #d4d4d4;
+      text-align: center;
+    }
+    #status.ok { color: var(--success); }
+    #status.error { color: var(--error); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">Extension</div>
+    <h2>Bulk Chat Mover</h2>
+    <p>Select multiple chats in ChatGPT and move them into a Project with one clean workflow.</p>
+    <button id="toggleBtn">Open Panel in ChatGPT</button>
+    <div id="status"></div>
+    <div class="hint">Works only on <code>chatgpt.com</code></div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

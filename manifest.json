@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGPT Bulk Chat Mover",
+  "version": "1.0",
+  "description": "Add checkboxes to ChatGPT sidebar chats and bulk-move them to any Project.",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "ChatGPT Bulk Chat Mover"
+  }
+}
