@@ -93,6 +93,22 @@
     var el = document.getElementById('bcm3-count');
     if (el) el.textContent = checked + ' of ' + all + ' chats selected';
   }
+  var lastClickedCheckbox = null;
+  function handleCheckboxClick(e, cb) {
+    if (e.shiftKey && lastClickedCheckbox && lastClickedCheckbox !== cb) {
+      var boxes = Array.from(document.querySelectorAll('.bcm3-cb'));
+      var start = boxes.indexOf(lastClickedCheckbox);
+      var end = boxes.indexOf(cb);
+      if (start !== -1 && end !== -1) {
+        var from = Math.min(start, end);
+        var to = Math.max(start, end);
+        var shouldCheck = cb.checked;
+        for (var i = from; i <= to; i++) boxes[i].checked = shouldCheck;
+      }
+    }
+    lastClickedCheckbox = cb;
+    updateCount();
+  }
   var lastProjectCount = 0;
   function loadProjects() {
     var projects = fetchAllProjects();
@@ -132,7 +148,10 @@
       cb.dataset.convId = convId;
       cb.dataset.title = link.textContent.trim().replace(/\\s+/g, ' ');
       cb.addEventListener('change', updateCount);
-      cb.addEventListener('click', function(e) { e.stopPropagation(); });
+      cb.addEventListener('click', function(e) {
+        e.stopPropagation();
+        handleCheckboxClick(e, cb);
+      });
       link.parentElement.insertBefore(wrap, link);
       wrap.appendChild(cb);
       wrap.appendChild(link);
@@ -242,6 +261,7 @@
     document.getElementById('bcm3-move-btn').addEventListener('click', moveSelected);
     document.getElementById('bcm3-close-btn').addEventListener('click', function() {
       panel.remove();
+      lastClickedCheckbox = null;
       var s = document.getElementById('bcm3-style');
       if (s) s.remove();
       if (window._bcmObserver) { window._bcmObserver.disconnect(); window._bcmObserver = null; }
