@@ -1,15 +1,15 @@
-# ChatGPT Chat Organizer
+# Chat Organizer for ChatGPT & Claude
 
-> A Chrome extension that brings bulk chat management to ChatGPT — select, move, and delete multiple chats in seconds.
+> A Chrome extension that brings bulk chat management to ChatGPT and Claude — select, move, and delete multiple chats in seconds.
 
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-blue?logo=googlechrome)
-![Version](https://img.shields.io/badge/version-1.0-brightgreen)
-![Platform](https://img.shields.io/badge/platform-chatgpt.com-412991?logo=openai)
+![Version](https://img.shields.io/badge/version-1.1-brightgreen)
+![Platform](https://img.shields.io/badge/platform-chatgpt.com%20%7C%20claude.ai-412991)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 ---
 
-If you've ever had dozens (or hundreds) of ChatGPT chats cluttering your sidebar, you know how painful it is to manage them one by one. **ChatGPT Chat Organizer** fixes that. It injects a sleek management panel directly into the ChatGPT sidebar, letting you select chats in bulk and move or delete them with a single click.
+If you've ever had dozens (or hundreds) of chats cluttering your sidebar, you know how painful it is to manage them one by one. **Chat Organizer** fixes that. It injects a sleek management panel directly into the ChatGPT or Claude sidebar, letting you select chats in bulk and move or delete them with a single click.
 
 | ChatGPT sidebar | Extension popup | Panel in action |
 |---|---|---|
@@ -19,6 +19,7 @@ If you've ever had dozens (or hundreds) of ChatGPT chats cluttering your sidebar
 
 ## Features
 
+- **Works on both ChatGPT and Claude** — the same panel and workflow on `chatgpt.com` and `claude.ai`
 - **Checkbox selection** — every chat in the sidebar gets a checkbox for easy picking
 - **Shift-click range selection** — select a whole block of chats with two clicks
 - **Select All / Deselect All** — one click to grab everything
@@ -33,7 +34,7 @@ If you've ever had dozens (or hundreds) of ChatGPT chats cluttering your sidebar
 ## Requirements
 
 - Google Chrome or any Chromium-based browser with **Manifest V3** support
-- An active session on [https://chatgpt.com](https://chatgpt.com)
+- An active session on [https://chatgpt.com](https://chatgpt.com) or [https://claude.ai](https://claude.ai)
 
 ---
 
@@ -54,7 +55,7 @@ Since this extension isn't on the Chrome Web Store (yet), load it manually in a 
 
 ### Moving chats to a project
 
-1. Go to [https://chatgpt.com](https://chatgpt.com).
+1. Go to [https://chatgpt.com](https://chatgpt.com) or [https://claude.ai](https://claude.ai).
 2. Click the extension icon and turn the **Panel** toggle **on**.
 3. Checkboxes appear next to every chat in the sidebar — start selecting.
 4. Use **Shift + click** to select a range of chats quickly.
@@ -89,30 +90,31 @@ chatgpt-chats-management-tool/
 
 | Permission | Why it's needed |
 |---|---|
-| `activeTab` | Interact with the currently open ChatGPT tab from the popup |
+| `activeTab` | Interact with the currently open tab from the popup |
 | `scripting` | Inject and execute the panel toggle in the active tab |
-| `host_permissions` → `chatgpt.com/*` | Limit the extension to ChatGPT pages only — nothing else |
+| `host_permissions` → `chatgpt.com/*` | Enable the extension on ChatGPT pages |
+| `host_permissions` → `claude.ai/*` | Enable the extension on Claude pages |
 
 ---
 
 ## Known Limitations
 
-- **DOM dependency** — the extension targets ChatGPT's sidebar structure. If OpenAI updates their UI, some selectors may break. Check back here for updates.
+- **DOM dependency** — the extension targets the sidebar structure of each site. If ChatGPT or Claude updates their UI, some selectors may break. Check back here for updates.
 - **Dynamic re-renders** — queue logic is best-effort under heavy sidebar activity. If it stalls, refresh and retry.
-- **Not affiliated with OpenAI** — this is an independent tool, not an official OpenAI product.
+- **Not affiliated with OpenAI or Anthropic** — this is an independent tool, not an official product of either company.
 
 ---
 
 ## Troubleshooting
 
 **Panel doesn't appear**
-Make sure you're on `https://chatgpt.com` (not a subdomain), then open the popup and confirm the toggle is on.
+Make sure you're on `https://chatgpt.com` or `https://claude.ai`, then open the popup and confirm the toggle is on.
 
 **Projects dropdown is empty**
-Wait a moment for the sidebar to fully load, then click **Refresh Projects** in the panel.
+Wait a moment for the sidebar to fully load, then click **Refresh Projects** in the panel. On Claude, the extension will automatically open and close the project picker to populate the list.
 
 **Action stops mid-queue**
-Refresh the ChatGPT page, re-select your chats, and run the action again.
+Refresh the page, re-select your chats, and run the action again.
 
 **Delete confirmation doesn't fire**
 Wait for the UI to settle after selecting chats, then retry. Rapid selections can sometimes outpace the modal.
@@ -123,7 +125,7 @@ Wait for the UI to settle after selecting chats, then retry. Rapid selections ca
 
 1. Edit `manifest.json`, `popup.html`, `popup.js`, or `content.js` directly.
 2. Go to `chrome://extensions` and click the **reload** button on the extension card after each change.
-3. Open Chrome DevTools on `chatgpt.com` to inspect DOM selectors and debug runtime behavior.
+3. Open Chrome DevTools on `chatgpt.com` or `claude.ai` to inspect DOM selectors and debug runtime behavior.
 
 ---
 
