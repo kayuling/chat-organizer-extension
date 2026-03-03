@@ -2,7 +2,6 @@
   'use strict';
   function fetchAllProjects() {
     var projects = [];
-    // Source 1: localStorage (snorlax-history cache)
     try {
       for (var i = 0; i < localStorage.length; i++) {
         var key = localStorage.key(i);
@@ -22,7 +21,6 @@
         }
       }
     } catch (e) {}
-    // Source 2: DOM links (catches projects loaded by clicking "More")
     var domLinks = Array.from(document.querySelectorAll('a[href*="/g/g-p-"]'));
     domLinks.forEach(function(a) {
       var m = a.href.match(/[/]g[/](g-p-[^/?#]+)/);
@@ -147,14 +145,6 @@
       return r.width > 0 && r.height > 0;
     });
   }
-  function getVisibleButtons() {
-    return Array.from(document.querySelectorAll('button')).filter(function(el) {
-      var style = window.getComputedStyle(el);
-      if (style.display === 'none' || style.visibility === 'hidden') return false;
-      var r = el.getBoundingClientRect();
-      return r.width > 0 && r.height > 0;
-    });
-  }
   function isVisibleElement(el) {
     if (!el) return false;
     var style = window.getComputedStyle(el);
@@ -163,10 +153,22 @@
     return r.width > 0 && r.height > 0;
   }
   function normalizeText(s) {
-    return (s || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    return (s || '').trim().replace(/\\s+/g, ' ').toLowerCase();
   }
   function findMenuButtonForChatLink(link) {
     if (!link) return null;
+    // Primary: button is inside the <a> tag itself
+    var btn = link.querySelector('button.__menu-item-trailing-btn')
+      || link.querySelector('button[aria-haspopup="menu"]');
+    if (btn) return btn;
+    // Fallback: check bcm3-wrap parent (after checkbox injection)
+    var wrap = link.closest('.bcm3-wrap');
+    if (wrap) {
+      btn = wrap.querySelector('button.__menu-item-trailing-btn')
+        || wrap.querySelector('button[aria-haspopup="menu"]');
+      if (btn) return btn;
+    }
+    // Fallback: original row-based search
     var row = link.closest('li') || link.parentElement;
     if (!row) return null;
     return row.querySelector('button.__menu-item-trailing-btn')
@@ -175,122 +177,170 @@
       || row.querySelector('button[aria-label*="menu" i]')
       || row.querySelector('button');
   }
+  function dismissOpenMenus() {
+    var active = document.activeElement || document.body;
+    active.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  }
+  function findDeleteConfirmButton() {
+    // Try data-testid first
+    var exactConfirm = document.querySelector('button[data-testid="delete-conversation-confirm-button"]');
+    if (isVisibleElement(exactConfirm)) return exactConfirm;
+    // Search inside dialog/modal containers
+    var dialogEl = document.querySelector('[role="dialog"]')
+      || document.querySelector('[role="alertdialog"]')
+      || document.querySelector('[data-state="open"]');
+    if (dialogEl) {
+      var dialogBtns = Array.from(dialogEl.querySelectorAll('button')).filter(isVisibleElement);
+      var found = dialogBtns.find(function(b) {
+        var txt = normalizeText(b.textContent);
+        return txt === 'delete' || txt === 'delete chat' || txt === 'delete conversation';
+      });
+      if (found) return found;
+    }
+    // Last resort: visible "Delete" button not inside a menu
+    var allBtns = Array.from(document.querySelectorAll('button')).filter(isVisibleElement);
+    return allBtns.find(function(b) {
+      var txt = normalizeText(b.textContent);
+      return (txt === 'delete' || txt === 'delete chat' || txt === 'delete conversation')
+        && !b.closest('[role="menu"]')
+        && b.closest('[role="dialog"], [role="alertdialog"], [class*="modal"], [class*="popover"], [data-state="open"]');
+    }) || null;
+  }
+  // Wait until the sidebar has at least one chat link rendered
+  function waitForSidebarReady(timeoutMs) {
+    timeoutMs = timeoutMs || 15000;
+    return new Promise(function(resolve) {
+      var elapsed = 0;
+      var interval = 500;
+      function check() {
+        if (document.querySelectorAll('nav a[href^="/c/"]').length > 0) {
+          resolve(true);
+          return;
+        }
+        elapsed += interval;
+        if (elapsed >= timeoutMs) { resolve(false); return; }
+        setTimeout(check, interval);
+      }
+      check();
+    });
+  }
+  // Re-select checkboxes for all remaining queued items (those not yet processed)
+  function reSelectQueuedItems(queue) {
+    if (!queue || !queue.items) return;
+    for (var i = queue.index; i < queue.items.length; i++) {
+      var convId = queue.items[i].convId;
+      var cb = document.querySelector('.bcm3-cb[data-conv-id="' + convId + '"]');
+      if (cb) cb.checked = true;
+    }
+    updateCount();
+  }
   async function processMoveQueue() {
     if (bcm3QueueRunning) return;
     var queue = readMoveQueue();
     if (!queue || !queue.items || !queue.items.length) return;
+    if (queue.index >= queue.items.length) { clearMoveQueue(); return; }
     bcm3QueueRunning = true;
     try {
+      // Wait for sidebar to be fully rendered before doing anything
+      setStatus('Waiting for sidebar...');
+      var sidebarReady = await waitForSidebarReady(15000);
+      if (!sidebarReady) {
+        setStatus('Sidebar not ready. Retrying in 3s...');
+        bcm3QueueRunning = false;
+        setTimeout(processMoveQueue, 3000);
+        return;
+      }
+      // Re-inject checkboxes and re-select remaining queued items so user can see state
+      injectCheckboxes();
+      reSelectQueuedItems(queue);
       var total = queue.items.length;
       var action = queue.action || 'move';
       var actionWord = action === 'delete' ? 'Delete' : 'Move';
-      setStatus('Resuming ' + actionWord.toLowerCase() + ' queue: ' + (queue.index + 1) + '/' + total);
-      while (queue.index < total) {
-        var item = queue.items[queue.index];
-        var title = item.title || item.convId || '';
-        var link = null;
-        for (var r = 0; r < 12; r++) {
-          link = findChatLinkByConvId(item.convId);
-          if (link) break;
-          await delay(250);
-        }
-        if (!link) {
-          setStatus('[' + (queue.index + 1) + '/' + total + '] Chat not found: "' + title + '" (skip)');
-          queue.index++;
-          writeMoveQueue(queue);
-          continue;
-        }
-        link.scrollIntoView({ behavior: 'instant', block: 'center' });
-        await delay(260);
-        realHover(link);
-        await delay(380);
-        var btn = findMenuButtonForChatLink(link);
-        if (!btn) {
-          setStatus('[' + (queue.index + 1) + '/' + total + '] No menu button: "' + title + '" (skip)');
-          queue.index++;
-          writeMoveQueue(queue);
-          continue;
-        }
-        setStatus('[' + (queue.index + 1) + '/' + total + '] ' + actionWord + ' "' + title + '"...');
-        realClick(btn);
+      setStatus('Resuming ' + actionWord.toLowerCase() + ': ' + (queue.index + 1) + '/' + total);
+      // Process ONE item per page load for delete action (reload after each deletion),
+      // or all items in one pass for move action.
+      var item = queue.items[queue.index];
+      var title = item.title || item.convId || '';
+      // Find the chat link
+      var link = null;
+      for (var r = 0; r < 30; r++) {
+        link = findChatLinkByConvId(item.convId);
+        if (link) break;
         await delay(500);
-        if (action === 'move') {
-          var moveItem = null;
-          for (var w = 0; w < 20; w++) {
-            var items = getVisibleMenuItems();
-            moveItem = items.find(function(el) {
-              return normalizeText(el.textContent).indexOf('move to project') === 0;
-            });
-            if (moveItem) break;
-            await delay(150);
-          }
-          if (!moveItem) {
-            setStatus('[' + (queue.index + 1) + '] "Move to project" not found');
-            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-            await delay(240);
-            queue.index++;
-            writeMoveQueue(queue);
-            continue;
-          }
-          realHover(moveItem);
-          realClick(moveItem);
-          await delay(520);
-          var projItem = null;
-          var pName = normalizeText(queue.projectName || '');
-          for (var w2 = 0; w2 < 18; w2++) {
-            var pitems = getVisibleMenuItems();
-            projItem = pitems.find(function(el) { return normalizeText(el.textContent) === pName; });
-            if (projItem) break;
-            await delay(150);
-          }
-          if (!projItem) {
-            setStatus('[' + (queue.index + 1) + '] Project "' + queue.projectName + '" not in submenu');
-            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-            await delay(240);
-            queue.index++;
-            writeMoveQueue(queue);
-            continue;
-          }
-          realClick(projItem);
-        } else if (action === 'delete') {
-          var deleteItem = null;
-          for (var wd = 0; wd < 20; wd++) {
-            var ditems = getVisibleMenuItems();
-            deleteItem = ditems.find(function(el) {
-              var txt = normalizeText(el.textContent);
-              return txt === 'delete' || txt.indexOf('delete ') === 0;
-            });
-            if (deleteItem) break;
-            await delay(150);
-          }
-          if (!deleteItem) {
-            setStatus('[' + (queue.index + 1) + '] "Delete" not found in menu');
-            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-            await delay(240);
-            queue.index++;
-            writeMoveQueue(queue);
-            continue;
-          }
-          realHover(deleteItem);
-          realClick(deleteItem);
-          await delay(520);
-          var confirmDelete = null;
-          for (var wc = 0; wc < 20; wc++) {
-            var exactConfirm = document.querySelector('button[data-testid="delete-conversation-confirm-button"]');
-            if (isVisibleElement(exactConfirm)) {
-              confirmDelete = exactConfirm;
-              break;
-            }
-            var btns = getVisibleButtons();
-            confirmDelete = btns.find(function(el) {
-              var txt = normalizeText(el.textContent);
-              return txt === 'delete' || txt === 'delete chat' || txt === 'delete conversation';
-            });
-            if (confirmDelete) break;
-            await delay(120);
-          }
-          if (confirmDelete) realClick(confirmDelete);
+      }
+      if (!link) {
+        setStatus('[' + (queue.index + 1) + '/' + total + '] Chat not found: "' + title + '" (skip)');
+        queue.index++;
+        writeMoveQueue(queue);
+        // Reload to continue with next item
+        if (action === 'delete' && queue.index < total) {
+          await delay(500);
+          location.reload();
         }
+        return;
+      }
+      link.scrollIntoView({ behavior: 'instant', block: 'center' });
+      await delay(300);
+      realHover(link);
+      await delay(500);
+      var btn = findMenuButtonForChatLink(link);
+      if (!btn) {
+        setStatus('[' + (queue.index + 1) + '/' + total + '] No menu button: "' + title + '" (skip)');
+        queue.index++;
+        writeMoveQueue(queue);
+        if (action === 'delete' && queue.index < total) {
+          await delay(500);
+          location.reload();
+        }
+        return;
+      }
+      setStatus('[' + (queue.index + 1) + '/' + total + '] ' + actionWord + ' "' + title + '"...');
+      if (action === 'move') {
+        realClick(btn);
+        await delay(700);
+        var moveItem = null;
+        for (var w = 0; w < 25; w++) {
+          var mitems = getVisibleMenuItems();
+          moveItem = mitems.find(function(el) {
+            return normalizeText(el.textContent).indexOf('move to project') === 0;
+          });
+          if (moveItem) break;
+          await delay(150);
+        }
+        if (!moveItem) {
+          setStatus('[' + (queue.index + 1) + '] "Move to project" not found');
+          dismissOpenMenus();
+          await delay(300);
+          queue.index++;
+          writeMoveQueue(queue);
+          // For move, continue in same pass
+          bcm3QueueRunning = false;
+          await processMoveQueue();
+          return;
+        }
+        realHover(moveItem);
+        realClick(moveItem);
+        await delay(520);
+        var projItem = null;
+        var pName = normalizeText(queue.projectName || '');
+        for (var w2 = 0; w2 < 18; w2++) {
+          var pitems = getVisibleMenuItems();
+          projItem = pitems.find(function(el) { return normalizeText(el.textContent) === pName; });
+          if (projItem) break;
+          await delay(150);
+        }
+        if (!projItem) {
+          setStatus('[' + (queue.index + 1) + '] Project "' + queue.projectName + '" not in submenu');
+          dismissOpenMenus();
+          await delay(300);
+          queue.index++;
+          writeMoveQueue(queue);
+          bcm3QueueRunning = false;
+          await processMoveQueue();
+          return;
+        }
+        realClick(projItem);
         queue.moved++;
         queue.index++;
         writeMoveQueue(queue);
@@ -298,14 +348,76 @@
         if (liveCb) liveCb.checked = false;
         updateCount();
         await delay(950);
+        if (queue.index < total) {
+          bcm3QueueRunning = false;
+          await processMoveQueue();
+        } else {
+          setStatus('Done! Moved ' + queue.moved + '/' + total + ' to "' + queue.projectName + '"');
+          clearMoveQueue();
+          setTimeout(function() { injectCheckboxes(); updateCount(); }, 1000);
+        }
+      } else if (action === 'delete') {
+        realClick(btn);
+        await delay(700);
+        var deleteItem = null;
+        for (var wd = 0; wd < 25; wd++) {
+          var ditems = getVisibleMenuItems();
+          deleteItem = ditems.find(function(el) {
+            return normalizeText(el.textContent) === 'delete';
+          });
+          if (deleteItem) break;
+          await delay(150);
+        }
+        if (!deleteItem) {
+          setStatus('[' + (queue.index + 1) + '/' + total + '] "Delete" not found in menu (skip)');
+          dismissOpenMenus();
+          await delay(300);
+          queue.index++;
+          writeMoveQueue(queue);
+          // Reload to try next item
+          await delay(500);
+          location.reload();
+          return;
+        }
+        realHover(deleteItem);
+        await delay(100);
+        realClick(deleteItem);
+        await delay(800);
+        var confirmDelete = null;
+        for (var wc = 0; wc < 30; wc++) {
+          confirmDelete = findDeleteConfirmButton();
+          if (confirmDelete) break;
+          await delay(150);
+        }
+        if (!confirmDelete) {
+          setStatus('[' + (queue.index + 1) + '/' + total + '] Confirm button not found (skip)');
+          dismissOpenMenus();
+          await delay(300);
+          queue.index++;
+          writeMoveQueue(queue);
+          await delay(500);
+          location.reload();
+          return;
+        }
+        // Click confirm — advance queue BEFORE reload so index is correct on resume
+        queue.moved++;
+        queue.index++;
+        writeMoveQueue(queue);
+        realClick(confirmDelete);
+        // Wait briefly for the deletion to register, then reload.
+        // On reload, processMoveQueue will auto-resume from the updated index.
+        await delay(1200);
+        if (queue.index < total) {
+          setStatus('Deleted ' + queue.moved + '/' + total + '. Reloading for next...');
+          location.reload();
+        } else {
+          // All done — clear queue and reload one final time to clean up
+          setStatus('Done! Deleted ' + queue.moved + '/' + total + ' chats. Reloading...');
+          clearMoveQueue();
+          await delay(800);
+          location.reload();
+        }
       }
-      if (action === 'delete') {
-        setStatus('Done! Deleted ' + queue.moved + '/' + total + ' chats');
-      } else {
-        setStatus('Done! Moved ' + queue.moved + '/' + total + ' to "' + queue.projectName + '"');
-      }
-      clearMoveQueue();
-      setTimeout(function() { location.reload(); }, 1200);
     } finally {
       bcm3QueueRunning = false;
     }
@@ -337,14 +449,12 @@
       lastProjectCount = 0;
       return;
     }
-    // Only update dropdown if count changed (avoids resetting selection on every mutation)
     if (projects.length === lastProjectCount) return;
     lastProjectCount = projects.length;
     var currentVal = sel.value;
     sel.innerHTML = projects.map(function(p) {
       return '<option value="' + p.id + '">' + p.name + '</option>';
     }).join('');
-    // Restore previous selection if still available
     if (currentVal && sel.querySelector('option[value="' + currentVal + '"]')) {
       sel.value = currentVal;
     }
@@ -405,7 +515,7 @@
       '<div id="bcm3-count">Loading...</div>' +
       '<select id="bcm3-project-sel"><option>Loading...</option></select>' +
       '<button id="bcm3-refresh-btn"><svg class="bcm3-btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg>Refresh Projects</button>' +
-      '<button id="bcm3-selall-btn"><svg class="bcm3-btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 11 3 3L22 4"></path><path d="m21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>Select / Deselect All</button>' +
+      '<button id="bcm3-selall-btn"><svg class="bcm3-btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 11 3 3L22 4"></path><path d="m21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2h11"></path></svg>Select / Deselect All</button>' +
       '<button id="bcm3-move-btn"><svg class="bcm3-btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 14 3-3 3 3"></path><path d="M12 11v9"></path><path d="M2 10V5a2 2 0 0 1 2-2h3l2 3h11a2 2 0 0 1 2 2v2"></path></svg>Move Selected to Project</button>' +
       '<button id="bcm3-delete-btn"><svg class="bcm3-btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>Delete</button>' +
       '<button id="bcm3-close-btn"><svg class="bcm3-btn-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>Close</button>' +
@@ -418,7 +528,7 @@
       updateCount();
     });
     document.getElementById('bcm3-refresh-btn').addEventListener('click', function() {
-      lastProjectCount = 0; // force reload
+      lastProjectCount = 0;
       loadProjects();
     });
     document.getElementById('bcm3-move-btn').addEventListener('click', moveSelected);
@@ -436,7 +546,6 @@
         wrap.remove();
       });
     });
-    // Watch sidebar chat links for checkbox injection
     var injectTimer = null;
     window._bcmObserver = new MutationObserver(function() {
       clearTimeout(injectTimer);
@@ -444,7 +553,6 @@
     });
     window._bcmObserver.observe(document.querySelector('nav') || document.body, { childList: true, subtree: true });
     injectCheckboxes();
-    // Watch for new project links appearing in the DOM (e.g. after clicking "More")
     var projectTimer = null;
     var knownProjectCount = document.querySelectorAll('a[href*="/g/g-p-"]').length;
     window._bcmProjectObserver = new MutationObserver(function() {
@@ -453,15 +561,15 @@
         knownProjectCount = currentCount;
         clearTimeout(projectTimer);
         projectTimer = setTimeout(function() {
-          lastProjectCount = 0; // force reload
+          lastProjectCount = 0;
           loadProjects();
         }, 400);
       }
     });
     window._bcmProjectObserver.observe(document.body, { childList: true, subtree: true });
     loadProjects();
-    // Resume queued moves after ChatGPT refresh/re-render.
-    setTimeout(processMoveQueue, 700);
+    // Resume any pending queue on page load (the core of the reload-per-delete flow)
+    setTimeout(processMoveQueue, 2000);
   }
   window._bcmInit = init;
   setTimeout(init, 2000);
