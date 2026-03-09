@@ -142,6 +142,10 @@
     if (el) el.textContent = checked + ' of ' + all + ' chats selected';
   }
   var BCM3_QUEUE_KEY = 'bcm3-task-queue-v1';
+  function hasPendingQueue() {
+    var queue = readMoveQueue();
+    return !!(queue && queue.items && queue.items.length && queue.index < queue.items.length);
+  }
   var bcm3QueueRunning = false;
   function readMoveQueue() {
     try {
@@ -692,6 +696,7 @@
   async function moveSelected() { await startSelectedAction('move'); }
   async function deleteSelected() { await startSelectedAction('delete'); }
   function init() {
+    window._bcmEnabled = true;
     if (document.getElementById('bcm3-panel')) return;
     injectStyle();
     var panel = document.createElement('div');
@@ -724,6 +729,7 @@
     document.getElementById('bcm3-move-btn').addEventListener('click', moveSelected);
     document.getElementById('bcm3-delete-btn').addEventListener('click', deleteSelected);
     document.getElementById('bcm3-close-btn').addEventListener('click', function() {
+      window._bcmEnabled = false;
       panel.remove();
       lastClickedCheckbox = null;
       var s = document.getElementById('bcm3-style');
@@ -764,14 +770,18 @@
     setTimeout(processMoveQueue, 2000);
   }
   window._bcmInit = init;
-  setTimeout(init, 2000);
-  // Re-run on SPA navigation
+  // Only auto-open when resuming an in-progress queued action (e.g., delete across reloads).
+  if (hasPendingQueue()) {
+    setTimeout(init, 2000);
+  }
+  // Re-run on SPA navigation only when panel was explicitly enabled by the user
+  // or when there's queued work that must resume.
   var lastUrl = location.href;
   new MutationObserver(function() {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
       setTimeout(function() {
-        if (!document.getElementById('bcm3-panel')) init();
+        if (!document.getElementById('bcm3-panel') && (window._bcmEnabled || hasPendingQueue())) init();
       }, 1500);
     }
   }).observe(document.body, { childList: true, subtree: true });
