@@ -941,24 +941,14 @@
       cbs.forEach(function(cb) { cb.checked = shouldSelectAll; });
       updateCount();
     });
-    document.getElementById('bcm3-close-btn').addEventListener('click', function() {
-      setEnabledState(false);
+    document.getElementById('bcm3-refresh-btn').addEventListener('click', function() {
+      lastProjectCount = 0;
+      loadProjects(true); // forceModal=true: scrape from picker if DOM/API are empty
     });
     document.getElementById('bcm3-move-btn').addEventListener('click', moveSelected);
     document.getElementById('bcm3-delete-btn').addEventListener('click', deleteSelected);
     document.getElementById('bcm3-close-btn').addEventListener('click', function() {
-      window._bcmEnabled = false;
-      panel.remove();
-      lastClickedCheckbox = null;
-      var s = document.getElementById('bcm3-style');
-      if (s) s.remove();
-      if (window._bcmObserver) { window._bcmObserver.disconnect(); window._bcmObserver = null; }
-      if (window._bcmProjectObserver) { window._bcmProjectObserver.disconnect(); window._bcmProjectObserver = null; }
-      document.querySelectorAll('.bcm3-wrap').forEach(function(wrap) {
-        var link = wrap.querySelector('a');
-        if (link) wrap.parentElement.insertBefore(link, wrap);
-        wrap.remove();
-      });
+      setEnabledState(false);
     });
     var injectTimer = null;
     window._bcmObserver = new MutationObserver(function() {
@@ -983,7 +973,7 @@
     window._bcmProjectObserver.observe(document.body, { childList: true, subtree: true });
     // On Claude.ai pass forceModal=true so the modal fallback fires
     // automatically on first open if the DOM scan and API both come up empty.
-    loadProjects(SITE.site === 'claude');
+    loadProjects(false);
     // Resume any pending queue on page load (the core of the reload-per-delete flow)
     setTimeout(processMoveQueue, 2000);
   }
