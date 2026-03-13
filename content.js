@@ -334,6 +334,9 @@
         if (action === 'delete' && queue.index < total) {
           await delay(500);
           location.reload();
+        } else if (action === 'move' && queue.index < total) {
+          bcm3QueueRunning = false;
+          await processMoveQueue();
         }
         return;
       }
@@ -349,6 +352,9 @@
         if (action === 'delete' && queue.index < total) {
           await delay(500);
           location.reload();
+        } else if (action === 'move' && queue.index < total) {
+          bcm3QueueRunning = false;
+          await processMoveQueue();
         }
         return;
       }
